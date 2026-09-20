@@ -64,9 +64,10 @@ public class NeoForgeRecipePlatform implements IRecipePlatform {
         // recipe viewers listen to.
         Minecraft mc = Minecraft.getInstance();
         if (mc.level != null) {
-            boolean isMemory = mc.getConnection() != null && mc.getConnection().getConnection().isMemoryConnection();
+            boolean integratedServer = mc.getConnection() != null && mc.getConnection().getConnection().isMemoryConnection();
             try {
-                NeoForge.EVENT_BUS.post(new TagsUpdatedEvent(mc.level.registryAccess(), true, isMemory));
+                // 26.2 splits the event into the two causes it can have, a client fires the packet one.
+                NeoForge.EVENT_BUS.post(new TagsUpdatedEvent.ClientPacketReceived(mc.level.registryAccess(), integratedServer));
             } catch (Throwable t) {
                 Constants.LOG.warn("Failed to fire TagsUpdatedEvent", t);
             }

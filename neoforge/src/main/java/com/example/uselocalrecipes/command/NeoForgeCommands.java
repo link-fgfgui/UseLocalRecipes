@@ -6,7 +6,7 @@ import java.util.function.Consumer;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
-import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -32,11 +32,11 @@ public final class NeoForgeCommands {
                             UseLocalRecipesCommand.dumpTypes(reply(context));
                             return 1;
                         })
-                        .then(Commands.argument("type", ResourceLocationArgument.id())
+                        .then(Commands.argument("type", IdentifierArgument.id())
                                 .suggests((context, builder) ->
                                         SharedSuggestionProvider.suggest(UseLocalRecipesCommand.recipeTypeIds(), builder))
                                 .executes(context -> UseLocalRecipesCommand.dumpRecipes(
-                                        ResourceLocationArgument.getId(context, "type"), reply(context)))));
+                                        IdentifierArgument.getId(context, "type"), reply(context)))));
     }
 
     private static Consumer<Component> reply(CommandContext<CommandSourceStack> context) {

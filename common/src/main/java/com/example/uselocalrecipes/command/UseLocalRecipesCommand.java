@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 
@@ -27,7 +27,7 @@ public final class UseLocalRecipesCommand {
 
     /** Ids of every registered recipe type, used for command suggestions. */
     public static Collection<String> recipeTypeIds() {
-        return BuiltInRegistries.RECIPE_TYPE.keySet().stream().map(ResourceLocation::toString).toList();
+        return BuiltInRegistries.RECIPE_TYPE.keySet().stream().map(Identifier::toString).toList();
     }
 
     public static void status(Consumer<Component> reply) {
@@ -66,7 +66,7 @@ public final class UseLocalRecipesCommand {
                 .forEach(entry -> reply.accept(Component.literal("  " + typeName(entry.getKey()) + ": " + entry.getValue().size())));
     }
 
-    public static int dumpRecipes(ResourceLocation typeId, Consumer<Component> reply) {
+    public static int dumpRecipes(Identifier typeId, Consumer<Component> reply) {
         RecipeType<?> type = BuiltInRegistries.RECIPE_TYPE.getOptional(typeId).orElse(null);
         if (type == null) {
             reply.accept(Component.literal("Unknown recipe type " + typeId).withStyle(ChatFormatting.RED));
@@ -80,7 +80,7 @@ public final class UseLocalRecipesCommand {
 
         reply.accept(Component.literal("Locally read " + typeName(type) + " recipes (" + recipes.size() + " shown):")
                 .withStyle(ChatFormatting.GOLD));
-        recipes.forEach(holder -> reply.accept(Component.literal("  " + holder.id().location())));
+        recipes.forEach(holder -> reply.accept(Component.literal("  " + holder.id().identifier())));
         return recipes.size();
     }
 
@@ -89,7 +89,7 @@ public final class UseLocalRecipesCommand {
     }
 
     private static String typeName(RecipeType<?> type) {
-        ResourceLocation id = BuiltInRegistries.RECIPE_TYPE.getKey(type);
+        Identifier id = BuiltInRegistries.RECIPE_TYPE.getKey(type);
         return id != null ? id.toString() : type.toString();
     }
 }

@@ -6,9 +6,9 @@ import java.util.function.Consumer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.commands.SharedSuggestionProvider;
-import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * Builds the client side {@code /ulr} command for Fabric. Fabric's client commands cannot share the tree
@@ -34,11 +34,11 @@ public final class FabricCommands {
                             UseLocalRecipesCommand.dumpTypes(reply(context));
                             return 1;
                         })
-                        .then(ClientCommandManager.argument("type", ResourceLocationArgument.id())
+                        .then(ClientCommandManager.argument("type", IdentifierArgument.id())
                                 .suggests((context, builder) ->
                                         SharedSuggestionProvider.suggest(UseLocalRecipesCommand.recipeTypeIds(), builder))
                                 .executes(context -> UseLocalRecipesCommand.dumpRecipes(
-                                        context.getArgument("type", ResourceLocation.class), reply(context)))));
+                                        context.getArgument("type", Identifier.class), reply(context)))));
     }
 
     private static Consumer<Component> reply(CommandContext<FabricClientCommandSource> context) {

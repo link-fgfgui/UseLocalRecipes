@@ -18,7 +18,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.repository.ServerPacksSource;
@@ -57,7 +57,7 @@ public final class LocalRecipeLoader {
         packs.addAll(modPacks);
 
         FileToIdConverter lister = FileToIdConverter.registry(Registries.RECIPE);
-        SortedMap<ResourceLocation, Recipe<?>> parsed = new TreeMap<>();
+        SortedMap<Identifier, Recipe<?>> parsed = new TreeMap<>();
         List<String> failures = new ArrayList<>();
         List<Registry.PendingTags<?>> pendingTags = List.of();
         int fileCount = 0;
@@ -71,9 +71,9 @@ public final class LocalRecipeLoader {
                     TagLoader.buildUpdatedLookups(frozen, pendingTags).stream());
             RegistryOps<JsonElement> ops = lookup.createSerializationContext(JsonOps.INSTANCE);
 
-            for (Map.Entry<ResourceLocation, Resource> entry : lister.listMatchingResources(resources).entrySet()) {
+            for (Map.Entry<Identifier, Resource> entry : lister.listMatchingResources(resources).entrySet()) {
                 fileCount++;
-                ResourceLocation id = lister.fileToId(entry.getKey());
+                Identifier id = lister.fileToId(entry.getKey());
 
                 try (Reader reader = entry.getValue().openAsReader()) {
                     Recipe<?> recipe = Recipe.CODEC.parse(ops, StrictJsonParser.parse(reader))

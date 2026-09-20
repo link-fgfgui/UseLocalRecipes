@@ -12,8 +12,10 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 
     // JEI is optional, only the client side recipe transfer integrates with it. The sources live in the
-    // common project, so JEI is needed to compile and to run them here.
-    modCompileOnly "mezz.jei:jei-${minecraft_version}-fabric:${jei_version}"
+    // common project, so the api is needed for compilation and at runtime for testing.
+    // Loom 1.15 and newer compile against the official mappings, so the same api jar the NeoForge module
+    // uses can be put on the compile classpath here as well.
+    compileOnly "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
     modLocalRuntime "mezz.jei:jei-${minecraft_version}-fabric:${jei_version}"
 }
 

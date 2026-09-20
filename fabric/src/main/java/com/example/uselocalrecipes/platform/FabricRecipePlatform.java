@@ -77,7 +77,7 @@ public class FabricRecipePlatform implements IRecipePlatform {
         ClientTickEvents.END_CLIENT_TICK.register(client -> RecipeSyncController.onClientTick());
 
         ClientRecipeSynchronizedEvent.EVENT.register((client, synchronizedRecipes) -> {
-            RecipeMap recipes = RecipeMap.create(synchronizedRecipes.recipes());
+            RecipeMap recipes = RecipeMerger.toRecipeMap(synchronizedRecipes.recipes());
             RecipeSyncController.onServerRecipesReceived(RecipeMerger.typesOf(recipes), recipes);
         });
 

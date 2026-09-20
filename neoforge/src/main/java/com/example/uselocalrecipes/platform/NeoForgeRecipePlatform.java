@@ -11,6 +11,8 @@ import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.packs.PackLocationInfo;
+import net.minecraft.server.packs.PackSelectionConfig;
+import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.repository.PackSource;
@@ -49,7 +51,11 @@ public class NeoForgeRecipePlatform implements IRecipePlatform {
                 Pack.ResourcesSupplier supplier = ResourcePackLoader.createPackForMod(modFile);
                 PackLocationInfo location = new PackLocationInfo(
                         "mod:" + first.getModId(), Component.literal(first.getDisplayName()), PackSource.BUILT_IN, Optional.empty());
-                packs.add(supplier.openPrimary(location));
+                // 26.3 replaced openPrimary with the two step metadata/resource API, the helper NeoForge
+                // uses for its own mod packs takes care of that for us.
+                Pack pack = ResourcePackLoader.readWithOptionalMeta(
+                        location, supplier, PackType.SERVER_DATA, new PackSelectionConfig(false, Pack.Position.TOP, false));
+                pack.open().forEach(packs::add);
             } catch (Exception e) {
                 Constants.LOG.warn("Could not read the data files of {}", first.getModId(), e);
             }

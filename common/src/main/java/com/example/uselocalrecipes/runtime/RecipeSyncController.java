@@ -158,7 +158,7 @@ public final class RecipeSyncController {
         MinecraftServer server = client.getSingleplayerServer();
         if (server != null && !server.getRecipeManager().getRecipes().isEmpty()) {
             LocalRecipeData data = new LocalRecipeData(
-                    RecipeMap.create(server.getRecipeManager().getRecipes()),
+                    RecipeMerger.toRecipeMap(server.getRecipeManager().getRecipes()),
                     server.getRecipeManager().getRecipes().size(), 0, List.of());
             Constants.LOG.info("Using {} recipes of the integrated server", server.getRecipeManager().getRecipes().size());
             localData.set(data);

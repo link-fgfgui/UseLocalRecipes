@@ -53,7 +53,7 @@ public final class LocalRecipeLoader {
     public static LocalRecipeData load(RegistryAccess registries, List<PackResources> modPacks) {
         // Later packs override earlier ones, so vanilla goes first.
         List<PackResources> packs = new ArrayList<>(modPacks.size() + 1);
-        packs.add(ServerPacksSource.createVanillaPackSource());
+        packs.add(ServerPacksSource.createVanillaPackSource().fullResources());
         packs.addAll(modPacks);
 
         FileToIdConverter lister = FileToIdConverter.registry(Registries.RECIPE);
@@ -76,7 +76,7 @@ public final class LocalRecipeLoader {
                 Identifier id = lister.fileToId(entry.getKey());
 
                 try (Reader reader = entry.getValue().openAsReader()) {
-                    Recipe<?> recipe = Recipe.CODEC.parse(ops, StrictJsonParser.parse(reader))
+                    Recipe<?> recipe = Recipe.DIRECT_CODEC.parse(ops, StrictJsonParser.parse(reader))
                             .getOrThrow(message -> new JsonParseException(message));
                     parsed.put(id, recipe);
                 } catch (Exception e) {
@@ -102,6 +102,6 @@ public final class LocalRecipeLoader {
             }
         }
 
-        return new LocalRecipeData(RecipeMap.create(holders), fileCount, failedCount, List.copyOf(failures), pendingTags);
+        return new LocalRecipeData(RecipeMerger.toRecipeMap(holders), fileCount, failedCount, List.copyOf(failures), pendingTags);
     }
 }

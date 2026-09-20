@@ -2,7 +2,7 @@
   "required": false,
   "minVersion": "0.8",
   "package": "com.example.uselocalrecipes.mixin.jei",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_25",
   "mixins": [],
   "client": [
     "StartEventObserverMixin",
@@ -11,5 +11,8 @@
   "server": [],
   "injectors": {
     "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
   }
 }

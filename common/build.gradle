@@ -10,21 +10,20 @@ neoForge {
     if (at.exists()) {
         accessTransformers.from(at.absolutePath)
     }
-    parchment {
-        minecraftVersion = parchment_minecraft
-        mappingsVersion = parchment_version
-    }
 }
 
 dependencies {
-    compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
-    // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
-    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
-    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
+    // Fabric and NeoForge both bundle Fabric Mixin, so it is safe to use it in common
+    // If you need to update, check what version they are using to see what is compatible
+    // https://github.com/neoforged/NeoForge/blob/26.1.x/gradle.properties#L37
+    // https://github.com/FabricMC/fabric-loader/blob/master/gradle.properties#L12
+    compileOnly('net.fabricmc:sponge-mixin:0.17.3+mixin.0.8.7')
+    // Fabric and NeoForge both bundle MixinExtras, so it is safe to use it in common
+    compileOnly(annotationProcessor('io.github.llamalad7:mixinextras-common:0.5.3'))
 
     // JEI is optional and only used for the client side recipe transfer. Its NeoForge artifact is published
-    // with official mappings, which is why it can be used from the common project at all. Fabric remaps it
-    // through its own dependency below, so both loaders see the exact same api.
+    // with the official mappings, which is what both loaders compile against since 26.x, so the same jar can
+    // be put on the compile classpath of the common project.
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 }
 
@@ -47,7 +46,7 @@ artifacts {
 // Implement mcgradleconventions loader attribute
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
 ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
-    configurations.named("$variant") {
+    configurations.named(variant) {
         attributes {
             attribute(loaderAttribute, 'common')
         }
@@ -55,7 +54,7 @@ def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', Strin
 }
 sourceSets.configureEach {
     [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
-        configurations.named("$variant") {
+        configurations.named(variant) {
             attributes {
                 attribute(loaderAttribute, 'common')
             }

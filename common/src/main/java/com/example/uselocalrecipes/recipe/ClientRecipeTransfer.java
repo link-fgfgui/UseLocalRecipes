@@ -17,7 +17,7 @@ import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
@@ -94,7 +94,7 @@ public final class ClientRecipeTransfer {
             // can be placed into empty slots without having to merge with leftovers of a previous recipe.
             for (Slot slot : craftingSlots) {
                 if (!slot.getItem().isEmpty()) {
-                    click(gameMode, container, player, slot.index, 0, ClickType.QUICK_MOVE);
+                    click(gameMode, container, player, slot.index, 0, ContainerInput.QUICK_MOVE);
                 }
             }
             for (Slot slot : craftingSlots) {
@@ -181,9 +181,9 @@ public final class ClientRecipeTransfer {
 
             // Pick the whole stack up, then place one item per set. Anything that is left over stays on
             // the cursor and is put back afterwards.
-            click(gameMode, container, player, source.index, 0, ClickType.PICKUP);
+            click(gameMode, container, player, source.index, 0, ContainerInput.PICKUP);
             while (remaining > 0 && !container.getCarried().isEmpty()) {
-                click(gameMode, container, player, target.index, 1, ClickType.PICKUP);
+                click(gameMode, container, player, target.index, 1, ContainerInput.PICKUP);
                 remaining--;
             }
             if (remaining > 0) {
@@ -204,14 +204,14 @@ public final class ClientRecipeTransfer {
     private static boolean returnLeftovers(MultiPlayerGameMode gameMode, AbstractContainerMenu container, Player player,
                                            Slot source, List<Slot> inventorySlots) {
         if (source.getItem().isEmpty()) {
-            click(gameMode, container, player, source.index, 0, ClickType.PICKUP);
+            click(gameMode, container, player, source.index, 0, ContainerInput.PICKUP);
             if (container.getCarried().isEmpty()) {
                 return true;
             }
         }
         for (Slot slot : inventorySlots) {
             if (slot.getItem().isEmpty()) {
-                click(gameMode, container, player, slot.index, 0, ClickType.PICKUP);
+                click(gameMode, container, player, slot.index, 0, ContainerInput.PICKUP);
                 if (container.getCarried().isEmpty()) {
                     return true;
                 }
@@ -221,7 +221,7 @@ public final class ClientRecipeTransfer {
     }
 
     private static void click(MultiPlayerGameMode gameMode, AbstractContainerMenu container, Player player,
-                              int slot, int button, ClickType type) {
-        gameMode.handleInventoryMouseClick(container.containerId, slot, button, type, player);
+                              int slot, int button, ContainerInput type) {
+        gameMode.handleContainerInput(container.containerId, slot, button, type, player);
     }
 }

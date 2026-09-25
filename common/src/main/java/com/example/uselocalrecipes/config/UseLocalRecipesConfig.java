@@ -11,8 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * A small json config, deliberately implemented without any loader specific config api so that both
- * loaders share the exact same file format.
+ * A small json config, implemented without any loader specific config api so both loaders share the file format.
  */
 public class UseLocalRecipesConfig {
 
@@ -26,11 +25,13 @@ public class UseLocalRecipesConfig {
     public int syncDelayTicks = 60;
 
     /**
-     * Whether the recipes the server sent win over locally read recipes. When enabled, recipes of a
-     * recipe type the server sent are taken from the server only. When disabled, locally read recipes
-     * are added on top, which is only useful when the server sends incomplete data.
+     * Whether the recipes the server sent win over locally read ones. When disabled, local recipes of a
+     * recipe type the server sent are added on top, which only helps when the server sends incomplete data.
      */
     public boolean preferServerTypes = true;
+
+    /** Warns in chat when recipes had to be read from local files because the server did not send them. */
+    public boolean warnAboutLocalRecipes = true;
 
     /** Logs every local recipe file that could not be parsed. */
     public boolean logFailedRecipes = false;

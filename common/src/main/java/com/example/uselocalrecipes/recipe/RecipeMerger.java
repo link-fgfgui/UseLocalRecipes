@@ -15,18 +15,15 @@ import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeMap;
 import net.minecraft.world.item.crafting.RecipeType;
 
-/**
- * Combines the recipes the server sent with the recipes that were read from local files.
- */
+/** Combines the recipes the server sent with the recipes that were read from local files. */
 public final class RecipeMerger {
 
     private RecipeMerger() {
     }
 
     /**
-     * Merges the two recipe sets. Recipes are deduplicated by id, with the server always winning.
-     * When {@code preferServerTypes} is set, locally read recipes of a recipe type the server sent are
-     * dropped entirely, because the server clearly knows that type better than the local files do.
+     * Deduplicates by id with the server always winning. With {@code preferServerTypes}, locally read
+     * recipes of a type the server sent are dropped, the server knows that type better.
      */
     public static RecipeMap merge(RecipeMap serverRecipes, Set<RecipeType<?>> serverTypes, RecipeMap localRecipes, boolean preferServerTypes) {
         if (localRecipes.values().isEmpty()) {
@@ -47,12 +44,7 @@ public final class RecipeMerger {
         return toRecipeMap(byId.values());
     }
 
-    /**
-     * Turns a bunch of recipes into a {@link RecipeMap}.
-     *
-     * <p>Since 26.3 recipes are registry entries, so the map has to be built through a lookup. The holder
-     * keys are the recipe ids, which is what {@link RecipeMap#byKey} and the viewers use.
-     */
+    /** Since 26.3 recipes are registry entries, the map has to be built through a lookup keyed by recipe id. */
     public static RecipeMap toRecipeMap(Collection<RecipeHolder<?>> holders) {
         MappedRegistry<Recipe<?>> registry = new MappedRegistry<>(Registries.RECIPE, Lifecycle.stable());
         for (RecipeHolder<?> holder : holders) {

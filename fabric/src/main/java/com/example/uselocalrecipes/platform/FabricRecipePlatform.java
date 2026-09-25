@@ -38,7 +38,7 @@ public class FabricRecipePlatform implements IRecipePlatform {
         for (ModContainer mod : FabricLoader.getInstance().getAllMods()) {
             String modId = mod.getMetadata().getId();
             if (Constants.MOD_ID.equals(modId) || "fabricloader".equals(modId) || "java".equals(modId) || "minecraft".equals(modId)) {
-                // The vanilla data comes from the game itself, see LocalRecipeLoader.
+                // Vanilla data comes from the game itself, see LocalRecipeLoader.
                 continue;
             }
 
@@ -64,8 +64,7 @@ public class FabricRecipePlatform implements IRecipePlatform {
         List<RecipeHolder<?>> holders = List.copyOf(recipes.values());
         SynchronizedRecipes synchronizedRecipes = SynchronizedRecipesImpl.of(holders);
 
-        // Fabric API has no public way to set the synchronized recipes yet, this is exactly what its own
-        // recipe sync packet handler does before firing the event below.
+        // Fabric API has no public setter yet, this is what its own recipe sync packet handler does before the event.
         ((SynchronizedClientRecipesSetter) connection.recipes()).fabric_setSynchronizedClientRecipes(synchronizedRecipes);
         ClientRecipeSynchronizedEvent.EVENT.invoker().onRecipesSynchronized(client, synchronizedRecipes);
     }

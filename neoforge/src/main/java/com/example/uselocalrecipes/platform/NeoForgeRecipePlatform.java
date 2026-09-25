@@ -1,7 +1,6 @@
 package com.example.uselocalrecipes.platform;
 
 import com.example.uselocalrecipes.Constants;
-import com.example.uselocalrecipes.command.NeoForgeCommands;
 import com.example.uselocalrecipes.platform.services.IRecipePlatform;
 import com.example.uselocalrecipes.runtime.RecipeSyncController;
 import java.util.ArrayList;
@@ -22,7 +21,6 @@ import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RecipesReceivedEvent;
-import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.TagsUpdatedEvent;
 import net.neoforged.neoforge.resource.ResourcePackLoader;
@@ -43,7 +41,7 @@ public class NeoForgeRecipePlatform implements IRecipePlatform {
 
             IModInfo first = mods.get(0);
             if ("minecraft".equals(first.getModId()) || Constants.MOD_ID.equals(first.getModId())) {
-                // The vanilla data comes from the game itself, see LocalRecipeLoader.
+                // Vanilla data comes from the game itself, see LocalRecipeLoader.
                 continue;
             }
 
@@ -51,8 +49,7 @@ public class NeoForgeRecipePlatform implements IRecipePlatform {
                 Pack.ResourcesSupplier supplier = ResourcePackLoader.createPackForMod(modFile);
                 PackLocationInfo location = new PackLocationInfo(
                         "mod:" + first.getModId(), Component.literal(first.getDisplayName()), PackSource.BUILT_IN, Optional.empty());
-                // 26.3 replaced openPrimary with the two step metadata/resource API, the helper NeoForge
-                // uses for its own mod packs takes care of that for us.
+                // 26.3 replaced openPrimary with a metadata/resource API, this NeoForge helper handles it.
                 Pack pack = ResourcePackLoader.readWithOptionalMeta(
                         location, supplier, PackType.SERVER_DATA, new PackSelectionConfig(false, Pack.Position.TOP, false));
                 pack.open().forEach(packs::add);
@@ -66,13 +63,12 @@ public class NeoForgeRecipePlatform implements IRecipePlatform {
 
     @Override
     public void injectRecipes(Set<RecipeType<?>> recipeTypes, RecipeMap recipes) {
-        // This is the very event NeoForge fires after receiving recipes from the server, and the one
-        // recipe viewers listen to.
+        // The same event NeoForge fires for server recipes, and the one viewers listen to.
         Minecraft mc = Minecraft.getInstance();
         if (mc.level != null) {
             boolean integratedServer = mc.getConnection() != null && mc.getConnection().getConnection().isMemoryConnection();
             try {
-                // 26.2 splits the event into the two causes it can have, a client fires the packet one.
+                // 26.2 split the event by cause, the client fires the packet one.
                 NeoForge.EVENT_BUS.post(new TagsUpdatedEvent.ClientPacketReceived(mc.level.registryAccess(), integratedServer));
             } catch (Throwable t) {
                 Constants.LOG.warn("Failed to fire TagsUpdatedEvent", t);
@@ -88,8 +84,6 @@ public class NeoForgeRecipePlatform implements IRecipePlatform {
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> RecipeSyncController.onClientTick());
         NeoForge.EVENT_BUS.addListener((RecipesReceivedEvent event) ->
                 RecipeSyncController.onServerRecipesReceived(event.getRecipeTypes(), event.getRecipeMap()));
-        NeoForge.EVENT_BUS.addListener((RegisterClientCommandsEvent event) ->
-                event.getDispatcher().register(NeoForgeCommands.create()));
 
         Constants.LOG.info("Use Local Recipes ready for NeoForge");
     }

@@ -39,7 +39,7 @@ public class NeoForgeRecipePlatform implements IRecipePlatform {
                 continue;
             }
 
-            IModInfo first = mods.get(0);
+            IModInfo first = mods.getFirst();
             if ("minecraft".equals(first.getModId()) || Constants.MOD_ID.equals(first.getModId())) {
                 // Vanilla data comes from the game itself, see LocalRecipeLoader.
                 continue;

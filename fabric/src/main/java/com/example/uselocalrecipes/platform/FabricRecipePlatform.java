@@ -1,7 +1,6 @@
 package com.example.uselocalrecipes.platform;
 
 import com.example.uselocalrecipes.Constants;
-import com.example.uselocalrecipes.config.UseLocalRecipesConfig;
 import com.example.uselocalrecipes.platform.services.IRecipePlatform;
 import com.example.uselocalrecipes.recipe.RecipeMerger;
 import com.example.uselocalrecipes.runtime.RecipeSyncController;

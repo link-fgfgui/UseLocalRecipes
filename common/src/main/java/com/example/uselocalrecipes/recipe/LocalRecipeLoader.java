@@ -29,7 +29,6 @@ import net.minecraft.tags.TagLoader;
 import net.minecraft.util.StrictJsonParser;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
-import net.minecraft.world.item.crafting.RecipeMap;
 
 /**
  * Reads the recipe files that ship with the game, the mods and the local data packs.
@@ -53,7 +52,7 @@ public final class LocalRecipeLoader {
         FileToIdConverter lister = FileToIdConverter.registry(Registries.RECIPE);
         SortedMap<Identifier, Recipe<?>> parsed = new TreeMap<>();
         List<String> failures = new ArrayList<>();
-        List<Registry.PendingTags<?>> pendingTags = List.of();
+        List<Registry.PendingTags<?>> pendingTags;
         int fileCount = 0;
         int failedCount = 0;
 

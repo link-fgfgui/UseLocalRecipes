@@ -53,7 +53,7 @@ public class PlayerRecipeTransferHandlerMixin {
         }
 
         List<IRecipeSlotView> inputViews = recipeSlotsView.getSlotViews(RecipeIngredientRole.INPUT);
-        if (inputViews.size() <= PLAYER_GRID_INDEXES.get(PLAYER_GRID_INDEXES.size() - 1)) {
+        if (inputViews.size() <= PLAYER_GRID_INDEXES.getLast()) {
             return;
         }
         for (int i = 0; i < inputViews.size(); i++) {

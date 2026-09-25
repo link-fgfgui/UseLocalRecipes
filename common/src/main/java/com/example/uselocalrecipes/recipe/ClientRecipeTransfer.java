@@ -175,9 +175,6 @@ public final class ClientRecipeTransfer {
         for (TransferOperation operation : operations) {
             Slot source = container.getSlot(operation.inventorySlotId());
             Slot target = container.getSlot(operation.craftingSlotId());
-            if (source == null || target == null) {
-                return false;
-            }
 
             // Every set needs this operation's count, one right click places one item.
             int remaining = batches * operation.count();

@@ -11,10 +11,6 @@ public record LocalRecipeData(RecipeMap recipes, int fileCount, int failedCount,
 
     public static final LocalRecipeData EMPTY = new LocalRecipeData(RecipeMap.EMPTY, 0, 0, List.of());
 
-    public LocalRecipeData(RecipeMap recipes, int fileCount, int failedCount) {
-        this(recipes, fileCount, failedCount, List.of());
-    }
-
     /** Must run on the client thread before the recipes reach the viewers, otherwise tag based ingredients fail. */
     public void applyPendingTags() {
         for (Registry.PendingTags<?> pendingTag : pendingTags) {

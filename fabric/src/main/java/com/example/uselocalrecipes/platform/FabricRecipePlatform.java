@@ -1,7 +1,6 @@
 package com.example.uselocalrecipes.platform;
 
 import com.example.uselocalrecipes.Constants;
-import com.example.uselocalrecipes.config.UseLocalRecipesConfig;
 import com.example.uselocalrecipes.platform.services.IRecipePlatform;
 import com.example.uselocalrecipes.recipe.RecipeMerger;
 import com.example.uselocalrecipes.runtime.RecipeSyncController;
@@ -38,7 +37,7 @@ public class FabricRecipePlatform implements IRecipePlatform {
         for (ModContainer mod : FabricLoader.getInstance().getAllMods()) {
             String modId = mod.getMetadata().getId();
             if (Constants.MOD_ID.equals(modId) || "fabricloader".equals(modId) || "java".equals(modId) || "minecraft".equals(modId)) {
-                // The vanilla data comes from the game itself, see LocalRecipeLoader.
+                // Vanilla data comes from the game itself, see LocalRecipeLoader.
                 continue;
             }
 
@@ -64,8 +63,7 @@ public class FabricRecipePlatform implements IRecipePlatform {
         List<RecipeHolder<?>> holders = List.copyOf(recipes.values());
         SynchronizedRecipes synchronizedRecipes = SynchronizedRecipesImpl.of(holders);
 
-        // Fabric API has no public way to set the synchronized recipes yet, this is exactly what its own
-        // recipe sync packet handler does before firing the event below.
+        // Fabric API has no public setter yet, this is what its own recipe sync packet handler does before the event.
         ((SynchronizedClientRecipesSetter) connection.recipes()).fabric_setSynchronizedClientRecipes(synchronizedRecipes);
         ClientRecipeSynchronizedEvent.EVENT.invoker().onRecipesSynchronized(client, synchronizedRecipes);
     }
@@ -77,6 +75,10 @@ public class FabricRecipePlatform implements IRecipePlatform {
         ClientTickEvents.END_CLIENT_TICK.register(client -> RecipeSyncController.onClientTick());
 
         ClientRecipeSynchronizedEvent.EVENT.register((client, synchronizedRecipes) -> {
+            if (RecipeSyncController.isInjecting()) {
+                // Our own injected recipes coming back to us.
+                return;
+            }
             RecipeMap recipes = RecipeMap.create(synchronizedRecipes.recipes());
             RecipeSyncController.onServerRecipesReceived(RecipeMerger.typesOf(recipes), recipes);
         });

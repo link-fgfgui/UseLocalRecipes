@@ -47,8 +47,10 @@ public final class RecipeSyncController {
         return thread;
     });
 
-    private static final AtomicReference<CompletableFuture<LocalRecipeData>> localLoad = new AtomicReference<>();
     private static final AtomicReference<LocalRecipeData> localData = new AtomicReference<>();
+
+    /** Bumped on every reset, so a read that finishes after a world change cannot write stale data. */
+    private static volatile int readGeneration;
 
     private static Set<RecipeType<?>> serverTypes = Set.of();
     private static RecipeMap serverRecipes = RecipeMap.EMPTY;
@@ -56,6 +58,7 @@ public final class RecipeSyncController {
     private static boolean active = false;
     private static boolean injected = false;
     private static boolean injecting = false;
+    private static boolean injectionFailed = false;
     private static boolean tagsApplied = false;
     private static boolean localRecipeWarningSent = false;
     private static int ticksUntilInject = -1;
@@ -92,9 +95,14 @@ public final class RecipeSyncController {
         if (ticksUntilInject > 0) {
             ticksUntilInject--;
         }
-        if (ticksUntilInject == 0 && !injected && localData.get() != null) {
+        if (!injectionFailed && ticksUntilInject == 0 && !injected && localData.get() != null) {
             inject();
         }
+    }
+
+    /** Used by the platforms to ignore the sync events their own injection causes. */
+    public static boolean isInjecting() {
+        return injecting;
     }
 
     public static void onServerRecipesReceived(Set<RecipeType<?>> types, RecipeMap recipes) {
@@ -105,6 +113,7 @@ public final class RecipeSyncController {
 
         serverTypes = Set.copyOf(types);
         serverRecipes = recipes;
+        injectionFailed = false;
         Constants.LOG.info("Server sent {} recipes of {} type(s)", recipes.values().size(), serverTypes.size());
 
         if (injected) {
@@ -164,12 +173,13 @@ public final class RecipeSyncController {
     }
 
     private static void reset() {
-        localLoad.set(null);
+        readGeneration++;
         localData.set(null);
         serverTypes = Set.of();
         serverRecipes = RecipeMap.EMPTY;
         active = false;
         injected = false;
+        injectionFailed = false;
         tagsApplied = false;
         localRecipeWarningSent = false;
         ticksUntilInject = -1;
@@ -185,9 +195,14 @@ public final class RecipeSyncController {
 
         RegistryAccess registries = level.registryAccess();
         List<PackResources> modPacks = Services.RECIPES.createModDataPacks();
+        int generation = readGeneration;
         CompletableFuture<LocalRecipeData> future = CompletableFuture.supplyAsync(
                 () -> LocalRecipeLoader.load(registries, modPacks), FILE_READER);
         future.whenComplete((data, error) -> {
+            if (generation != readGeneration) {
+                // The world changed while reading, this data belongs to a session that is gone.
+                return;
+            }
             if (data != null) {
                 localData.set(data);
                 Constants.LOG.info("Read {} local recipes from {} files", data.recipes().values().size(), data.fileCount());
@@ -195,7 +210,6 @@ public final class RecipeSyncController {
                 Constants.LOG.error("Failed to read local recipes", error);
             }
         });
-        localLoad.set(future);
     }
 
     private static void inject() {
@@ -218,6 +232,8 @@ public final class RecipeSyncController {
             Services.RECIPES.injectRecipes(mergedTypes, merged);
             injected = true;
         } catch (Throwable t) {
+            // Retrying every tick would only spam the log, a new world or new server data clears this again.
+            injectionFailed = true;
             Constants.LOG.error("Failed to inject recipes", t);
         } finally {
             injecting = false;
@@ -225,8 +241,8 @@ public final class RecipeSyncController {
 
         if (injected) {
             notifyLocalRecipes(localUsed);
+            logStatus(merged);
         }
-        logStatus(merged);
     }
 
     /** Warns the player once per world that part of the recipe list is local and may not match the server. */

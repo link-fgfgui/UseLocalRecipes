@@ -4,11 +4,15 @@ import com.example.uselocalrecipes.Constants;
 import com.example.uselocalrecipes.platform.Services;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 /**
  * A small json config, implemented without any loader specific config api so both loaders share the file format.
@@ -16,7 +20,7 @@ import java.nio.file.Path;
 public class UseLocalRecipesConfig {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static UseLocalRecipesConfig instance;
+    private static volatile UseLocalRecipesConfig instance;
 
     /** Whether this mod does anything at all. */
     public boolean enabled = true;
@@ -47,21 +51,26 @@ public class UseLocalRecipesConfig {
     public static synchronized UseLocalRecipesConfig load() {
         Path path = Services.PLATFORM.getConfigDir().resolve(Constants.MOD_ID + ".json");
         UseLocalRecipesConfig config = new UseLocalRecipesConfig();
+        boolean writeBack = !Files.exists(path);
 
-        if (Files.exists(path)) {
+        if (!writeBack) {
             try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-                UseLocalRecipesConfig read = GSON.fromJson(reader, UseLocalRecipesConfig.class);
+                JsonObject raw = JsonParser.parseReader(reader).getAsJsonObject();
+                UseLocalRecipesConfig read = GSON.fromJson(raw, UseLocalRecipesConfig.class);
                 if (read != null) {
                     config = read;
                 }
+                // Options added since the file was written are missing from it, show them to the user.
+                writeBack = !raw.keySet().containsAll(GSON.toJsonTree(config).getAsJsonObject().keySet());
             } catch (Exception e) {
                 Constants.LOG.warn("Could not read {}, using default settings", path, e);
             }
-        } else {
-            config.write(path);
         }
 
         config.syncDelayTicks = Math.max(0, config.syncDelayTicks);
+        if (writeBack) {
+            config.write(path);
+        }
         instance = config;
         return config;
     }
@@ -69,8 +78,15 @@ public class UseLocalRecipesConfig {
     private void write(Path path) {
         try {
             Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+            Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
+            try (Writer writer = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
                 GSON.toJson(this, writer);
+            }
+            try {
+                Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                // Not every file system can move atomically, a plain replace beats a half written file.
+                Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (Exception e) {
             Constants.LOG.warn("Could not write {}", path, e);

@@ -157,7 +157,7 @@ public final class ClientRecipeTransfer {
             Slot target = container.getSlot(operation.craftingSlotId());
             takenPerSet.merge(source, operation.count(), Integer::sum);
             placedPerSet.merge(target, operation.count(), Integer::sum);
-            itemPerTarget.putIfAbsent(target, available.get(source));
+            itemPerTarget.putIfAbsent(target, source.getItem());
         }
 
         int batches = MAX_BATCHES;
@@ -182,7 +182,13 @@ public final class ClientRecipeTransfer {
             // Pick the stack up, then place item by item; leftovers stay on the cursor and are put back below.
             click(gameMode, container, player, source.index, 0, ContainerInput.PICKUP);
             while (remaining > 0 && !container.getCarried().isEmpty()) {
+                int countBefore = target.getItem().getCount();
                 click(gameMode, container, player, target.index, 1, ContainerInput.PICKUP);
+                if (target.getItem().getCount() <= countBefore) {
+                    // The click did nothing (slot full or not accepting), do not report a failed transfer as success.
+                    returnLeftovers(gameMode, container, player, source, inventorySlots);
+                    return false;
+                }
                 remaining--;
             }
             if (remaining > 0) {

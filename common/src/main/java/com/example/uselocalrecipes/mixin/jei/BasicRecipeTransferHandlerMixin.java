@@ -3,14 +3,14 @@ package com.example.uselocalrecipes.mixin.jei;
 import com.example.uselocalrecipes.config.UseLocalRecipesConfig;
 import com.example.uselocalrecipes.recipe.ClientRecipeTransfer;
 import java.util.List;
-import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
 import mezz.jei.api.helpers.IStackHelper;
+import mezz.jei.api.recipe.transfer.IRecipeTransferContext;
 import mezz.jei.api.recipe.transfer.IRecipeTransferError;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandlerHelper;
 import mezz.jei.api.recipe.transfer.IRecipeTransferInfo;
+import mezz.jei.api.recipe.transfer.RecipeTransferResult;
 import mezz.jei.common.network.IConnectionToServer;
 import mezz.jei.library.transfer.BasicRecipeTransferHandler;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import org.spongepowered.asm.mixin.Final;
@@ -22,11 +22,11 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Takes over recipe transfer when JEI is not installed on the server.
+ * Takes over recipe transfer when JEI is not installed on the server, where JEI's own transfer would only
+ * show a "no server" error. The transfer is then done with client side clicks, the way EMI moves items.
  *
- * <p>JEI's slot based transfer requires its own counterpart on the server, without it the transfer button
- * only shows a "no server" error. In that case the transfer is done with client side clicks instead, the
- * same way EMI moves items around, which works on any server.
+ * <p>JEI 27 on 1.21.11 calls {@code transferRecipe(IRecipeTransferContext, boolean)}, so that is the overload
+ * the transfer has to be taken over in.
  *
  * <p>{@link Pseudo} keeps this mixin harmless when JEI is not installed.
  */
@@ -51,11 +51,10 @@ public class BasicRecipeTransferHandlerMixin {
     private IRecipeTransferInfo<AbstractContainerMenu, Object> transferInfo;
 
     @Inject(
-            method = "transferRecipe(Lnet/minecraft/world/inventory/AbstractContainerMenu;Ljava/lang/Object;Lmezz/jei/api/gui/ingredient/IRecipeSlotsView;Lnet/minecraft/world/entity/player/Player;ZZ)Lmezz/jei/api/recipe/transfer/IRecipeTransferError;",
+            method = "transferRecipe(Lmezz/jei/api/recipe/transfer/IRecipeTransferContext;Z)Lmezz/jei/api/recipe/transfer/IRecipeTransferError;",
             at = @At("HEAD"),
             cancellable = true)
-    private void ulr$clientSideTransfer(AbstractContainerMenu container, Object recipe, IRecipeSlotsView recipeSlotsView,
-                                        Player player, boolean maxTransfer, boolean doTransfer,
+    private void ulr$clientSideTransfer(IRecipeTransferContext<?, ?> context, boolean doTransfer,
                                         CallbackInfoReturnable<IRecipeTransferError> cir) {
         if (serverConnection.isJeiOnServer()) {
             // JEI is on the server, its own transfer is better than anything we could do here.
@@ -65,14 +64,20 @@ public class BasicRecipeTransferHandlerMixin {
             return;
         }
 
+        AbstractContainerMenu container = context.getContainer();
+        Object recipe = context.getRecipe();
         List<Slot> craftingSlots = transferInfo.getRecipeSlots(container, recipe);
         List<Slot> inventorySlots = transferInfo.getInventorySlots(container, recipe);
         if (!BasicRecipeTransferHandler.validateTransferInfo(transferInfo, container, craftingSlots, inventorySlots)) {
             return;
         }
 
-        cir.setReturnValue(ClientRecipeTransfer.transfer(
-                container, recipeSlotsView, player, maxTransfer, doTransfer,
-                craftingSlots, inventorySlots, stackHelper, handlerHelper));
+        IRecipeTransferError error = ClientRecipeTransfer.transfer(
+                container, context.getRecipeSlots(), context.getPlayer(), context.isMaxTransfer(), doTransfer,
+                craftingSlots, inventorySlots, stackHelper, handlerHelper);
+        if (error == null && doTransfer) {
+            context.completeRecipeTransfer(RecipeTransferResult.SUCCESS);
+        }
+        cir.setReturnValue(error);
     }
 }

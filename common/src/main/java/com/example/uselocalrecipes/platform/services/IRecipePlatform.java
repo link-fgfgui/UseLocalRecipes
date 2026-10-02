@@ -6,29 +6,15 @@ import net.minecraft.server.packs.PackResources;
 import net.minecraft.world.item.crafting.RecipeMap;
 import net.minecraft.world.item.crafting.RecipeType;
 
-/**
- * Loader specific parts of the recipe flow. Implemented by the fabric and neoforge modules.
- */
+/** Loader specific parts of the recipe flow, implemented by the fabric and neoforge modules. */
 public interface IRecipePlatform {
 
-    /**
-     * Returns a data pack for every loaded mod, ordered from lowest to highest priority.
-     * The vanilla data pack is appended by the common code, so mods always override vanilla.
-     */
+    /** A data pack for every loaded mod, lowest priority first. The vanilla pack is added by LocalRecipeLoader. */
     List<PackResources> createModDataPacks();
 
-    /**
-     * Hands recipes to the loader's client recipe synchronization, which makes every client side recipe
-     * viewer (JEI, EMI, ...) see them exactly as if the server itself had sent them.
-     *
-     * @param recipeTypes the recipe types the given recipes belong to
-     * @param recipes     the merged recipe set
-     */
+    /** Hands the merged recipes to the loader's client recipe synchronization, so viewers see them as server data. */
     void injectRecipes(Set<RecipeType<?>> recipeTypes, RecipeMap recipes);
 
-    /**
-     * Registers the loader specific client hooks that drive the recipe synchronization.
-     * Called once from the client entry point.
-     */
+    /** Registers the loader specific client hooks, called once from the client entry point. */
     void registerClientLifecycle();
 }

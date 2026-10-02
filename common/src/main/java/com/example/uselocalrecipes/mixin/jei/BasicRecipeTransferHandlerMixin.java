@@ -22,11 +22,11 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Takes over recipe transfer when JEI is not installed on the server.
+ * Takes over recipe transfer when JEI is not installed on the server, where JEI's own transfer would only
+ * show a "no server" error. The transfer is then done with client side clicks, the way EMI moves items.
  *
- * <p>JEI's slot based transfer requires its own counterpart on the server, without it the transfer button
- * only shows a "no server" error. In that case the transfer is done with client side clicks instead, the
- * same way EMI moves items around, which works on any server.
+ * <p>JEI 26.3 on 1.21.10 calls the six argument {@code transferRecipe} overload, which is the one taken
+ * over here. The context based overload only exists in newer JEI builds.
  *
  * <p>{@link Pseudo} keeps this mixin harmless when JEI is not installed.
  */

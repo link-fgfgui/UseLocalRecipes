@@ -27,18 +27,16 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * The 2x2 player crafting grid variant of {@link BasicRecipeTransferHandlerMixin}.
+ * The 2x2 player crafting grid variant of {@link BasicRecipeTransferHandlerMixin}, also harmless without JEI.
  *
- * <p>{@link Pseudo} keeps this mixin harmless when JEI is not installed.
+ * <p>JEI 26.3 on 1.21.10 calls the six argument {@code transferRecipe} overload, which is the one taken
+ * over here. The context based overload only exists in newer JEI builds.
  */
 @Pseudo
 @Mixin(PlayerRecipeTransferHandler.class)
 public class PlayerRecipeTransferHandlerMixin {
 
-    /**
-     * Indexes of the crafting recipe inputs that fit into the player crafting grid when the right and
-     * bottom edges are trimmed, the same ones JEI uses.
-     */
+    /** Indexes of the recipe inputs that fit into the player grid after trimming the right and bottom edges, same as JEI. */
     private static final List<Integer> PLAYER_GRID_INDEXES = List.of(0, 1, 3, 4);
 
     @Shadow
@@ -60,7 +58,7 @@ public class PlayerRecipeTransferHandlerMixin {
         }
 
         List<IRecipeSlotView> inputViews = recipeSlotsView.getSlotViews(RecipeIngredientRole.INPUT);
-        if (inputViews.size() <= PLAYER_GRID_INDEXES.get(PLAYER_GRID_INDEXES.size() - 1)) {
+        if (inputViews.size() <= PLAYER_GRID_INDEXES.getLast()) {
             return;
         }
         for (int i = 0; i < inputViews.size(); i++) {
@@ -89,6 +87,7 @@ public class PlayerRecipeTransferHandlerMixin {
     }
 
     private static IStackHelper ulr$stackHelper() {
+        // JEI 26.3 has no getOptionalJeiRuntime yet, the runtime is only there once JEI started.
         try {
             return Internal.getJeiRuntime().getJeiHelpers().getStackHelper();
         } catch (Throwable t) {

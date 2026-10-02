@@ -1,0 +1,3 @@
+{
+  "uselocalrecipes.message.local_recipes": "Use Local Recipes 正在显示 %s 条从你的客户端读取的配方（服务器未发送），它们可能与服务器上的不同。可在配置文件中用 warnAboutLocalRecipes 关闭此警告。"
+}

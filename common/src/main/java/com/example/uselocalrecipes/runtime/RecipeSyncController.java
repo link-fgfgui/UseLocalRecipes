@@ -6,28 +6,40 @@ import com.example.uselocalrecipes.platform.Services;
 import com.example.uselocalrecipes.recipe.LocalRecipeData;
 import com.example.uselocalrecipes.recipe.LocalRecipeLoader;
 import com.example.uselocalrecipes.recipe.RecipeMerger;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.server.MinecraftServer;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackResources;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeMap;
 import net.minecraft.world.item.crafting.RecipeType;
 
 /**
- * Drives the whole flow: wait for the recipes the server sends, read recipes from local files in the
- * meantime, then hand the merged result to the loader's client recipe synchronization.
+ * Waits for the recipes the server sends, reads recipes from local files in the meantime, then hands the
+ * merged result to the loader's client recipe synchronization.
  *
- * <p>Everything in here happens on the client thread, except for the file reading which runs on a
- * separate thread so that joining a world does not stall.
+ * <p>Only remote servers are handled, the integrated server of a singleplayer world already owns the
+ * recipes. Everything runs on the client thread except the file reading, so joining a world does not stall.
  */
 public final class RecipeSyncController {
+
+    /** Upper bound for how much a single status log lists. */
+    private static final int MAX_LOGGED_TYPES = 20;
+    private static final int MAX_LOGGED_RECIPES = 40;
 
     private static final ExecutorService FILE_READER = Executors.newSingleThreadExecutor(task -> {
         Thread thread = new Thread(task, "uselocalrecipes-reader");
@@ -35,20 +47,25 @@ public final class RecipeSyncController {
         return thread;
     });
 
-    private static final AtomicReference<CompletableFuture<LocalRecipeData>> localLoad = new AtomicReference<>();
     private static final AtomicReference<LocalRecipeData> localData = new AtomicReference<>();
+
+    /** Bumped on every reset, so a read that finishes after a world change cannot write stale data. */
+    private static volatile int readGeneration;
 
     private static Set<RecipeType<?>> serverTypes = Set.of();
     private static RecipeMap serverRecipes = RecipeMap.EMPTY;
+    /** Whether this session reads and injects recipes at all, false in singleplayer and when disabled. */
+    private static boolean active = false;
     private static boolean injected = false;
     private static boolean injecting = false;
+    private static boolean injectionFailed = false;
     private static boolean tagsApplied = false;
+    private static boolean localRecipeWarningSent = false;
     private static int ticksUntilInject = -1;
 
     private RecipeSyncController() {
     }
 
-    /** Called when the client joins a world. */
     public static void onClientJoin() {
         reset();
         if (!UseLocalRecipesConfig.get().enabled) {
@@ -56,37 +73,47 @@ public final class RecipeSyncController {
             return;
         }
 
+        if (Minecraft.getInstance().getSingleplayerServer() != null) {
+            // The integrated server sent everything already, doing nothing here cannot break anything.
+            Constants.LOG.info("Singleplayer, the integrated server owns the recipes, nothing to do");
+            return;
+        }
+
+        active = true;
         ticksUntilInject = UseLocalRecipesConfig.get().syncDelayTicks;
         startLocalRead();
     }
 
-    /** Called when the client leaves a world. */
     public static void onClientDisconnect() {
         reset();
     }
 
-    /** Called every client tick. */
     public static void onClientTick() {
+        if (!active) {
+            return;
+        }
         if (ticksUntilInject > 0) {
             ticksUntilInject--;
         }
-        if (ticksUntilInject == 0 && !injected && localData.get() != null) {
+        if (!injectionFailed && ticksUntilInject == 0 && !injected && localData.get() != null) {
             inject();
         }
     }
 
-    /**
-     * Called when the server sent recipes. While this is running the recipes are applied by the loader,
-     * see {@link #injecting}.
-     */
+    /** Used by the platforms to ignore the sync events their own injection causes. */
+    public static boolean isInjecting() {
+        return injecting;
+    }
+
     public static void onServerRecipesReceived(Set<RecipeType<?>> types, RecipeMap recipes) {
-        if (injecting) {
-            // Our own injected recipes coming back to us.
+        if (!active || injecting) {
+            // Not our session, or our own injected recipes coming back to us.
             return;
         }
 
         serverTypes = Set.copyOf(types);
         serverRecipes = recipes;
+        injectionFailed = false;
         Constants.LOG.info("Server sent {} recipes of {} type(s)", recipes.values().size(), serverTypes.size());
 
         if (injected) {
@@ -99,55 +126,66 @@ public final class RecipeSyncController {
         }
     }
 
-    /** Re-reads the local files, used by the /ulr reload command. */
-    public static void reloadLocalRecipes() {
-        if (Minecraft.getInstance().level == null) {
-            return;
+    /** Logs the state of the sync, this is the only place it is reported. */
+    private static void logStatus(RecipeMap merged) {
+        LocalRecipeData data = localData.get();
+        boolean serverDataReceived = !serverTypes.isEmpty() || !serverRecipes.values().isEmpty();
+
+        Constants.LOG.info("Use Local Recipes: enabled={}, injected={}", UseLocalRecipesConfig.get().enabled, injected);
+        Constants.LOG.info("  server: {} recipes, {} types{}", serverRecipes.values().size(), serverTypes.size(),
+                serverDataReceived ? "" : " (nothing received)");
+        Constants.LOG.info("  local: {} recipes from {} files, {} unreadable",
+                data != null ? data.recipes().values().size() : 0,
+                data != null ? data.fileCount() : 0,
+                data != null ? data.failedCount() : 0);
+        Constants.LOG.info("  viewer sees: {} recipes, {} of them from local files",
+                merged.values().size(), merged.values().size() - serverRecipes.values().size());
+        if (!serverTypes.isEmpty()) {
+            Constants.LOG.info("  types owned by the server: {}", typeNames(serverTypes));
         }
 
-        localData.set(null);
-        localLoad.set(null);
-        injected = false;
-        ticksUntilInject = 1;
-        startLocalRead();
+        logLocalRecipes(data != null ? data.recipes() : RecipeMap.EMPTY);
     }
 
-    public static RecipeMap localRecipes() {
-        LocalRecipeData data = localData.get();
-        return data != null ? data.recipes() : RecipeMap.EMPTY;
+    /** Logs how many local recipes were read per type, the individual ids only at debug level. */
+    private static void logLocalRecipes(RecipeMap localRecipes) {
+        Map<RecipeType<?>, List<RecipeHolder<?>>> byType = localRecipes.values().stream()
+                .collect(Collectors.groupingBy(holder -> holder.value().getType()));
+        byType.entrySet().stream()
+                .sorted(Comparator.comparingInt((Map.Entry<RecipeType<?>, List<RecipeHolder<?>>> entry) -> entry.getValue().size()).reversed())
+                .limit(MAX_LOGGED_TYPES)
+                .forEach(entry -> Constants.LOG.info("  local {}: {}", typeName(entry.getKey()), entry.getValue().size()));
+
+        if (Constants.LOG.isDebugEnabled()) {
+            byType.forEach((type, holders) -> holders.stream()
+                    .limit(MAX_LOGGED_RECIPES)
+                    .forEach(holder -> Constants.LOG.debug("  local {}: {}", typeName(type), holder.id().location())));
+        }
     }
 
-    public static Status status() {
-        LocalRecipeData data = localData.get();
-        int localCount = data != null ? data.recipes().values().size() : 0;
-        return new Status(
-                UseLocalRecipesConfig.get().enabled,
-                !serverTypes.isEmpty() || !serverRecipes.values().isEmpty(),
-                serverTypes,
-                serverRecipes.values().size(),
-                localCount,
-                data != null ? data.fileCount() : 0,
-                data != null ? data.failedCount() : 0,
-                data != null ? RecipeMerger.merge(serverRecipes, serverTypes, data.recipes(), UseLocalRecipesConfig.get().preferServerTypes).values().size() : 0,
-                injected,
-                data != null ? data.failures() : List.of()
-        );
+    private static String typeNames(Collection<RecipeType<?>> types) {
+        return types.stream().map(RecipeSyncController::typeName).sorted().collect(Collectors.joining(", "));
+    }
+
+    private static String typeName(RecipeType<?> type) {
+        ResourceLocation id = BuiltInRegistries.RECIPE_TYPE.getKey(type);
+        return id != null ? id.toString() : type.toString();
     }
 
     private static void reset() {
-        localLoad.set(null);
+        readGeneration++;
         localData.set(null);
         serverTypes = Set.of();
         serverRecipes = RecipeMap.EMPTY;
+        active = false;
         injected = false;
+        injectionFailed = false;
         tagsApplied = false;
+        localRecipeWarningSent = false;
         ticksUntilInject = -1;
     }
 
-    /**
-     * Reads the recipes that are available on this machine. In singleplayer the integrated server is the
-     * better source, everywhere else the game and mod files are read.
-     */
+    /** Reads the game and mod files, only called for remote servers. */
     private static void startLocalRead() {
         Minecraft client = Minecraft.getInstance();
         ClientLevel level = client.level;
@@ -155,22 +193,16 @@ public final class RecipeSyncController {
             return;
         }
 
-        MinecraftServer server = client.getSingleplayerServer();
-        if (server != null && !server.getRecipeManager().getRecipes().isEmpty()) {
-            LocalRecipeData data = new LocalRecipeData(
-                    RecipeMap.create(server.getRecipeManager().getRecipes()),
-                    server.getRecipeManager().getRecipes().size(), 0, List.of());
-            Constants.LOG.info("Using {} recipes of the integrated server", server.getRecipeManager().getRecipes().size());
-            localData.set(data);
-            localLoad.set(CompletableFuture.completedFuture(data));
-            return;
-        }
-
         RegistryAccess registries = level.registryAccess();
         List<PackResources> modPacks = Services.RECIPES.createModDataPacks();
+        int generation = readGeneration;
         CompletableFuture<LocalRecipeData> future = CompletableFuture.supplyAsync(
                 () -> LocalRecipeLoader.load(registries, modPacks), FILE_READER);
         future.whenComplete((data, error) -> {
+            if (generation != readGeneration) {
+                // The world changed while reading, this data belongs to a session that is gone.
+                return;
+            }
             if (data != null) {
                 localData.set(data);
                 Constants.LOG.info("Read {} local recipes from {} files", data.recipes().values().size(), data.fileCount());
@@ -178,7 +210,6 @@ public final class RecipeSyncController {
                 Constants.LOG.error("Failed to read local recipes", error);
             }
         });
-        localLoad.set(future);
     }
 
     private static void inject() {
@@ -200,33 +231,31 @@ public final class RecipeSyncController {
         try {
             Services.RECIPES.injectRecipes(mergedTypes, merged);
             injected = true;
-            // Viewers that already built their recipe list from the data of the server need to rebuild it.
-            JeiReloadHook.requestReload();
         } catch (Throwable t) {
+            // Retrying every tick would only spam the log, a new world or new server data clears this again.
+            injectionFailed = true;
             Constants.LOG.error("Failed to inject recipes", t);
         } finally {
             injecting = false;
         }
+
+        if (injected) {
+            notifyLocalRecipes(localUsed);
+            logStatus(merged);
+        }
     }
 
-    /**
-     * @param enabled            whether the mod is enabled in the config
-     * @param serverDataReceived whether the server sent any recipes
-     * @param serverTypes        the recipe types the server sent
-     * @param serverRecipeCount  number of recipes the server sent
-     * @param localRecipeCount   number of recipes read from local files
-     * @param localFileCount     number of local recipe files that were found
-     * @param localFailedCount   number of local recipe files that could not be parsed
-     * @param mergedRecipeCount  number of recipes that would currently be handed to the viewers
-     * @param injected           whether recipes were handed to the viewers already
-     * @param failures           descriptions of local recipe files that could not be parsed
-     */
-    public record Status(boolean enabled, boolean serverDataReceived, Set<RecipeType<?>> serverTypes, int serverRecipeCount,
-                         int localRecipeCount, int localFileCount, int localFailedCount, int mergedRecipeCount,
-                         boolean injected, List<String> failures) {
+    /** Warns the player once per world that part of the recipe list is local and may not match the server. */
+    private static void notifyLocalRecipes(int localUsed) {
+        if (localUsed <= 0 || localRecipeWarningSent || !UseLocalRecipesConfig.get().warnAboutLocalRecipes) {
+            return;
+        }
 
-        public int localUsedCount() {
-            return mergedRecipeCount - serverRecipeCount;
+        Player player = Minecraft.getInstance().player;
+        if (player != null) {
+            localRecipeWarningSent = true;
+            // 1.21.10 has no Player#sendSystemMessage on the client, displayClientMessage is the client side one.
+            player.displayClientMessage(Component.translatable("uselocalrecipes.message.local_recipes", localUsed), false);
         }
     }
 }

@@ -34,10 +34,8 @@ import net.minecraft.world.item.crafting.RecipeMap;
 /**
  * Reads the recipe files that ship with the game, the mods and the local data packs.
  *
- * <p>Instead of parsing the json files by hand, this builds a real vanilla data pack stack and runs the
- * exact same loading path that {@link net.minecraft.world.item.crafting.RecipeManager} uses on a server.
- * That way ingredients referring to item tags resolve correctly, because the tags of those packs are
- * loaded into an overlay registry lookup first.
+ * <p>It builds a real data pack stack and runs the vanilla loading path instead of parsing json by hand,
+ * so ingredients referring to item tags resolve against the tags of those packs.
  */
 public final class LocalRecipeLoader {
 
@@ -46,10 +44,6 @@ public final class LocalRecipeLoader {
     private LocalRecipeLoader() {
     }
 
-    /**
-     * @param registries the client's registry access, used to resolve items and tags
-     * @param modPacks   the mod data packs, ordered from lowest to highest priority
-     */
     public static LocalRecipeData load(RegistryAccess registries, List<PackResources> modPacks) {
         // Later packs override earlier ones, so vanilla goes first.
         List<PackResources> packs = new ArrayList<>(modPacks.size() + 1);
@@ -59,12 +53,12 @@ public final class LocalRecipeLoader {
         FileToIdConverter lister = FileToIdConverter.registry(Registries.RECIPE);
         SortedMap<ResourceLocation, Recipe<?>> parsed = new TreeMap<>();
         List<String> failures = new ArrayList<>();
-        List<Registry.PendingTags<?>> pendingTags = List.of();
+        List<Registry.PendingTags<?>> pendingTags;
         int fileCount = 0;
         int failedCount = 0;
 
         try (CloseableResourceManager resources = new MultiPackResourceManager(PackType.SERVER_DATA, packs)) {
-            // Load the tags of those packs so that ingredients referring to item tags resolve correctly.
+            // Load their tags first so ingredients referring to item tags resolve.
             RegistryAccess.Frozen frozen = registries.freeze();
             pendingTags = TagLoader.loadTagsForExistingRegistries(resources, frozen);
             HolderLookup.Provider lookup = HolderLookup.Provider.create(
@@ -102,6 +96,6 @@ public final class LocalRecipeLoader {
             }
         }
 
-        return new LocalRecipeData(RecipeMap.create(holders), fileCount, failedCount, List.copyOf(failures), pendingTags);
+        return new LocalRecipeData(RecipeMap.create(holders), fileCount, failedCount, pendingTags);
     }
 }

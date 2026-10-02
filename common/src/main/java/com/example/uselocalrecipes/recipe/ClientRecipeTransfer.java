@@ -24,9 +24,8 @@ import net.minecraft.world.item.ItemStack;
 /**
  * Moves the ingredients of a recipe into a crafting container by simulating the clicks a player would do.
  *
- * <p>JEI normally asks the server to do the transfer, which only works when JEI is installed on the server
- * as well. This class is the fallback for that case and works the same way EMI's recipe transfer does:
- * the client decides where every item goes, and the server only sees ordinary slot clicks.
+ * <p>JEI normally has the server do the transfer, which needs JEI on the server as well. This fallback
+ * works like EMI's recipe transfer: the client decides where every item goes, the server only sees clicks.
  */
 public final class ClientRecipeTransfer {
 
@@ -90,8 +89,7 @@ public final class ClientRecipeTransfer {
         }
 
         if (doTransfer) {
-            // Move everything that is already in the crafting slots into the inventory first, so the recipe
-            // can be placed into empty slots without having to merge with leftovers of a previous recipe.
+            // Empty the crafting slots first, so the recipe can be placed without merging into leftovers.
             for (Slot slot : craftingSlots) {
                 if (!slot.getItem().isEmpty()) {
                     click(gameMode, container, player, slot.index, 0, ClickType.QUICK_MOVE);
@@ -120,7 +118,7 @@ public final class ClientRecipeTransfer {
             return null;
         }
 
-        int batches = maxTransfer ? countBatches(operations.results, available) : 1;
+        int batches = maxTransfer ? countBatches(container, operations.results, available) : 1;
         if (!execute(gameMode, container, player, operations.results, batches, inventorySlots)) {
             return handlerHelper.createInternalError();
         }
@@ -131,8 +129,7 @@ public final class ClientRecipeTransfer {
     private static Map<Slot, ItemStack> collectAvailable(Player player, List<Slot> craftingSlots, List<Slot> inventorySlots, boolean afterClearing) {
         Map<Slot, ItemStack> available = new HashMap<>();
         if (!afterClearing) {
-            // A preview has to assume that the crafting slots are usable as a source, the real transfer
-            // moves their contents into the inventory first and can use them from there.
+            // A preview assumes the crafting slots are a source, the real transfer moves them to the inventory first.
             for (Slot slot : craftingSlots) {
                 if (!slot.getItem().isEmpty() && slot.allowModification(player)) {
                     available.put(slot, slot.getItem().copy());
@@ -148,22 +145,27 @@ public final class ClientRecipeTransfer {
     }
 
     /**
-     * Every transfer operation moves exactly one item out of its source slot, so the amount of complete
-     * sets that can be prepared is limited by the smallest source stack.
+     * Every operation of JEI 26 moves exactly one item from its source slot, so the amount of complete sets
+     * is limited by the smallest source stack and by the capacity of the crafting slots.
      */
-    private static int countBatches(List<TransferOperation> operations, Map<Slot, ItemStack> available) {
-        Map<Integer, Integer> required = new HashMap<>();
-        Map<Integer, Integer> present = new HashMap<>();
-        for (Slot slot : available.keySet()) {
-            present.put(slot.index, available.get(slot).getCount());
-        }
+    private static int countBatches(AbstractContainerMenu container, List<TransferOperation> operations, Map<Slot, ItemStack> available) {
+        Map<Slot, Integer> takenPerSet = new HashMap<>();
+        Map<Slot, Integer> placedPerSet = new HashMap<>();
+        Map<Slot, ItemStack> itemPerTarget = new HashMap<>();
         for (TransferOperation operation : operations) {
-            required.merge(operation.inventorySlotId(), 1, Integer::sum);
+            Slot source = container.getSlot(operation.inventorySlotId());
+            Slot target = container.getSlot(operation.craftingSlotId());
+            takenPerSet.merge(source, 1, Integer::sum);
+            placedPerSet.merge(target, 1, Integer::sum);
+            itemPerTarget.putIfAbsent(target, source.getItem());
         }
 
         int batches = MAX_BATCHES;
-        for (Map.Entry<Integer, Integer> entry : required.entrySet()) {
-            batches = Math.min(batches, present.getOrDefault(entry.getKey(), 0) / entry.getValue());
+        for (Map.Entry<Slot, Integer> entry : takenPerSet.entrySet()) {
+            batches = Math.min(batches, available.get(entry.getKey()).getCount() / entry.getValue());
+        }
+        for (Map.Entry<Slot, Integer> entry : placedPerSet.entrySet()) {
+            batches = Math.min(batches, entry.getKey().getMaxStackSize(itemPerTarget.get(entry.getKey())) / entry.getValue());
         }
         return Math.max(1, batches);
     }
@@ -173,17 +175,20 @@ public final class ClientRecipeTransfer {
         for (TransferOperation operation : operations) {
             Slot source = container.getSlot(operation.inventorySlotId());
             Slot target = container.getSlot(operation.craftingSlotId());
-            if (source == null || target == null) {
-                return false;
-            }
 
+            // One operation moves one item, so one set needs one right click.
             int remaining = batches;
 
-            // Pick the whole stack up, then place one item per set. Anything that is left over stays on
-            // the cursor and is put back afterwards.
+            // Pick the stack up, then place item by item; leftovers stay on the cursor and are put back below.
             click(gameMode, container, player, source.index, 0, ClickType.PICKUP);
             while (remaining > 0 && !container.getCarried().isEmpty()) {
+                int countBefore = target.getItem().getCount();
                 click(gameMode, container, player, target.index, 1, ClickType.PICKUP);
+                if (target.getItem().getCount() <= countBefore) {
+                    // The click did nothing (slot full or not accepting), do not report a failed transfer as success.
+                    returnLeftovers(gameMode, container, player, source, inventorySlots);
+                    return false;
+                }
                 remaining--;
             }
             if (remaining > 0) {
@@ -198,9 +203,7 @@ public final class ClientRecipeTransfer {
         return container.getCarried().isEmpty();
     }
 
-    /**
-     * Puts the stack that is left on the cursor back into an empty slot.
-     */
+    /** Puts the stack that is left on the cursor back into an empty slot. */
     private static boolean returnLeftovers(MultiPlayerGameMode gameMode, AbstractContainerMenu container, Player player,
                                            Slot source, List<Slot> inventorySlots) {
         if (source.getItem().isEmpty()) {

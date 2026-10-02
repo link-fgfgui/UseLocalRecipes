@@ -4,9 +4,11 @@ import com.example.uselocalrecipes.Constants;
 import com.example.uselocalrecipes.platform.services.IRecipePlatform;
 import com.example.uselocalrecipes.recipe.RecipeMerger;
 import com.example.uselocalrecipes.runtime.RecipeSyncController;
+import com.example.uselocalrecipes.mixin.ClientRecipeContainerAccessor;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -19,14 +21,20 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.ClientRecipeContainer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundUpdateRecipesPacket;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PathPackResources;
 import net.minecraft.server.packs.repository.PackSource;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeMap;
+import net.minecraft.world.item.crafting.RecipePropertySet;
 import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.item.crafting.SelectableRecipe;
+import net.minecraft.world.item.crafting.StonecutterRecipe;
 
 public class FabricRecipePlatform implements IRecipePlatform {
 
@@ -60,12 +68,33 @@ public class FabricRecipePlatform implements IRecipePlatform {
             return;
         }
 
+        if (!(connection.recipes() instanceof ClientRecipeContainer currentContainer)) {
+            Constants.LOG.warn("No client recipe container, cannot hand over {} recipes", recipes.values().size());
+            return;
+        }
+
         List<RecipeHolder<?>> holders = List.copyOf(recipes.values());
         SynchronizedRecipes synchronizedRecipes = SynchronizedRecipesImpl.of(holders);
 
-        // Fabric API has no public setter yet, this is what its own recipe sync packet handler does before the event.
-        ((SynchronizedClientRecipesSetter) connection.recipes()).fabric_setSynchronizedClientRecipes(synchronizedRecipes);
+        // 1. Fabric API data sync: write into the current container and notify listeners.
+        ((SynchronizedClientRecipesSetter) currentContainer).fabric_setSynchronizedClientRecipes(synchronizedRecipes);
         ClientRecipeSynchronizedEvent.EVENT.invoker().onRecipesSynchronized(client, synchronizedRecipes);
+
+        // 2. Vanilla pipeline commit: preserve existing itemSets & stonecutter recipes and invoke handleUpdateRecipes.
+        Map<ResourceKey<RecipePropertySet>, RecipePropertySet> itemSets;
+        if (currentContainer instanceof ClientRecipeContainerAccessor accessor) {
+            itemSets = accessor.uselocalrecipes$getItemSets();
+        } else {
+            itemSets = Map.of();
+        }
+
+        SelectableRecipe.SingleInputSet<StonecutterRecipe> stonecutterRecipes = currentContainer.stonecutterRecipes();
+        if (stonecutterRecipes == null) {
+            stonecutterRecipes = SelectableRecipe.SingleInputSet.empty();
+        }
+
+        ClientboundUpdateRecipesPacket packet = new ClientboundUpdateRecipesPacket(itemSets, stonecutterRecipes);
+        connection.handleUpdateRecipes(packet);
     }
 
     @Override

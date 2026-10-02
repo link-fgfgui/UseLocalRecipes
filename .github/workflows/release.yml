@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]+.*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to release (leave empty if triggered from a tag push)'
+        required: false
+        default: ''
+
+jobs:
+  release:
+    name: Build & Release Mod
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect Java Version
+        id: java-version
+        run: |
+          JAVA_VER=$(grep -E '^java_version=' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
+          echo "version=${JAVA_VER:-21}" >> "$GITHUB_OUTPUT"
+          echo "Detected Java version: ${JAVA_VER:-21}"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ steps.java-version.outputs.version }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew build
+
+      - name: Collect Release Jars
+        id: collect-jars
+        run: |
+          mkdir -p release-assets
+          # Collect Fabric and NeoForge jars, excluding javadoc jars
+          find fabric/build/libs neoforge/build/libs -maxdepth 1 -name "*.jar" ! -name "*-javadoc.jar" -exec cp {} release-assets/ \;
+          echo "Collected release files:"
+          ls -lh release-assets/
+
+      - name: Determine Prerelease
+        id: check-prerelease
+        run: |
+          REF_TAG="${{ github.ref_name }}"
+          if [ -n "${{ inputs.tag_name }}" ]; then
+            REF_TAG="${{ inputs.tag_name }}"
+          fi
+          if echo "$REF_TAG" | grep -Eqi "(alpha|beta|rc|pre)"; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}
+          name: Use Local Recipes ${{ inputs.tag_name != '' && inputs.tag_name || github.ref_name }}
+          files: release-assets/*.jar
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ steps.check-prerelease.outputs.is_prerelease == 'true' }}

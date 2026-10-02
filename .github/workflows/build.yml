@@ -1,0 +1,62 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Mod
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect Java Version
+        id: java-version
+        run: |
+          JAVA_VER=$(grep -E '^java_version=' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
+          echo "version=${JAVA_VER:-21}" >> "$GITHUB_OUTPUT"
+          echo "Detected Java version: ${JAVA_VER:-21}"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ steps.java-version.outputs.version }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew build
+
+      - name: Collect build artifacts
+        run: |
+          mkdir -p build-artifacts
+          find fabric/build/libs neoforge/build/libs -maxdepth 1 -name "*.jar" -exec cp {} build-artifacts/ \;
+          ls -lh build-artifacts/
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-artifacts-${{ github.ref_name }}-${{ github.sha }}
+          path: build-artifacts/*.jar
+          retention-days: 14

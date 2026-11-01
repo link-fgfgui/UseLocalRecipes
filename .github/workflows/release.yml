@@ -32,14 +32,32 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build
 
+      # Resolve the exact mod jar of each loader. Globbing build/libs/*.jar also picks up the
+      # sources and javadoc jars, and the publishing actions would then upload them as well
+      # (with an arbitrary one of them becoming the primary file on CurseForge).
+      - name: Collect release jars
+        id: jars
+        run: |
+          set -euo pipefail
+          mod_id=$(sed -n 's/^mod_id=//p' gradle.properties)
+          mc_version=$(sed -n 's/^minecraft_version=//p' gradle.properties)
+          version=$(sed -n 's/^version=//p' gradle.properties)
+          mkdir -p release-assets
+          for loader in fabric neoforge; do
+            jar="${loader}/build/libs/${mod_id}-${loader}-${mc_version}-${version}.jar"
+            if [ ! -f "${jar}" ]; then
+              echo "::error::Expected mod jar not found: ${jar}"
+              exit 1
+            fi
+            cp "${jar}" release-assets/
+            echo "${loader}=release-assets/$(basename "${jar}")" >> "$GITHUB_OUTPUT"
+          done
+          ls -l release-assets
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            fabric/build/libs/*.jar
-            neoforge/build/libs/*.jar
-            !**/*sources*.jar
-            !**/*javadoc*.jar
+          files: release-assets/*.jar
           generate_release_notes: true
 
       - name: Publish Fabric to CurseForge
@@ -53,10 +71,7 @@ jobs:
           changelog: ${{ github.event.head_commit.message }}
           loaders: fabric
           environment: client
-          files: |
-            fabric/build/libs/*.jar
-            !fabric/build/libs/*sources*.jar
-            !fabric/build/libs/*javadoc*.jar
+          files: ${{ steps.jars.outputs.fabric }}
 
       - name: Publish NeoForge to CurseForge
         uses: Kira-NT/mc-publish@v3.3.1
@@ -69,7 +84,4 @@ jobs:
           changelog: ${{ github.event.head_commit.message }}
           loaders: neoforge
           environment: client
-          files: |
-            neoforge/build/libs/*.jar
-            !neoforge/build/libs/*sources*.jar
-            !neoforge/build/libs/*javadoc*.jar
+          files: ${{ steps.jars.outputs.neoforge }}
